@@ -1,0 +1,24 @@
+{
+    "name": "morysky/hbase-thrift-driver",
+    "description": "HBase Thrift Driver for HBase 1.12",
+    "keywords": [
+        "hbase",
+        "thrift"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Morysky",
+            "email": "627571@qq.com"
+        }
+    ],
+    "require": {
+        "packaged/thrift": "^0.11.0"
+    },
+    "autoload": {
+        "classmap": ["thrift/"],
+        "psr-4": {
+            "Hbase\\": "src/"
+        }
+    }
+}
