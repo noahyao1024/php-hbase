@@ -67,14 +67,19 @@ class Hbase
 
     public function get(string $rowKey)
     {
-        $realRowKey = $this->get(static::getRealRowKeys($rowKey));
-
         $tget      = new TGet();
-        $tget->row = $realRowKey;
+        $tget->row = static::getRealRowKeys($rowKey);
 
         $response = $this->client->get(static::$table, $tget);
 
-        return json_decode(json_encode($response->columnValues), true);
+        return array_map(function ($column) {
+            return [
+                'family'    => $column->family,
+                'value'     => $column->value,
+                'qualifier' => $column->qualifier,
+                'timestamp' => $column->timestamp,
+            ];
+        }, $response->columnValues);
     }
 
     private static function getRealRowKeys(string $rowKey)
