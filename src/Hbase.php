@@ -2,6 +2,7 @@
 
 namespace Hbase;
 
+use THBaseServiceClient;
 use Thrift\Protocol\TBinaryProtocol;
 use Thrift\Transport\TBufferedTransport;
 use Thrift\Transport\TSocket;
