@@ -2,11 +2,13 @@
 
 namespace Hbase;
 
+use TColumnValue;
 use TGet;
 use THBaseServiceClient;
 use Thrift\Protocol\TBinaryProtocol;
 use Thrift\Transport\TBufferedTransport;
 use Thrift\Transport\TSocket;
+use TPut;
 
 class Hbase
 {
@@ -14,8 +16,6 @@ class Hbase
 
     protected static $thriftHost;
     protected static $thriftPort;
-
-    protected static $table;
 
     protected $client;
     protected $transport;
@@ -26,12 +26,10 @@ class Hbase
     * @author Morysky
     * @static
     */
-    public static function init(string $host, int $port, string $table)
+    public static function init(string $host, int $port)
     {
         static::$thriftHost = $host;
         static::$thriftPort = $port;
-
-        static::$table = $table;
     }
 
     /**
@@ -65,21 +63,41 @@ class Hbase
         $this->transport->close();
     }
 
-    public function get(string $rowKey)
+    public function get(string $table, string $rowKey)
     {
         $tget      = new TGet();
         $tget->row = static::getRealRowKeys($rowKey);
 
-        $response = $this->client->get(static::$table, $tget);
+        $response = $this->client->get($table, $tget);
 
         return array_map(function ($column) {
             return [
-                'family'    => $column->family,
-                'value'     => $column->value,
                 'qualifier' => $column->qualifier,
+                'value'     => $column->value,
                 'timestamp' => $column->timestamp,
+                /* Mask useless field
+                   'family' => $column->family,
+                */
             ];
         }, $response->columnValues);
+    }
+
+    public function put(string $table, string $rowKey, array $columns)
+    {
+        $tput      = new TPut();
+        $tput->row = static::getRealRowKeys($rowKey);
+
+        foreach ($columns as $column) {
+            $tcolumnValue = new TColumnValue();
+
+            $tcolumnValue->family    = $column['family']    ?? '';
+            $tcolumnValue->qualifier = $column['qualifier'] ?? '';
+            $tcolumnValue->value     = $column['value']     ?? '';
+
+            $tput->columnValues[] = $tcolumnValue;
+        }
+
+        $this->client->put($table, $tput);
     }
 
     private static function getRealRowKeys(string $rowKey)
