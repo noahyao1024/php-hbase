@@ -8,25 +8,33 @@ use THBaseServiceClient;
 use Thrift\Protocol\TBinaryProtocol;
 use Thrift\Transport\TBufferedTransport;
 use Thrift\Transport\TSocket;
+use TIOError;
 use TPut;
 use TResult;
 
+/**
+ * Class Hbase
+ *
+ * @package Hbase
+ */
 class Hbase
 {
     protected static $instance;
 
     protected static $thriftHost;
+
     protected static $thriftPort;
 
     protected $client;
+
     protected $transport;
 
     /**
-    * Method  getInstance
-    *
-    * @author Morysky
-    * @static
-    */
+     * Method  getInstance
+     *
+     * @author Morysky
+     * @static
+     */
     public static function init(string $host, int $port)
     {
         static::$thriftHost = $host;
@@ -64,6 +72,13 @@ class Hbase
         $this->transport->close();
     }
 
+    /**
+     * @param string $table
+     * @param string $rowKey
+     *
+     * @throws TIOError
+     * @return array
+     */
     public function get(string $table, string $rowKey)
     {
         $tGet      = new TGet();
@@ -74,6 +89,13 @@ class Hbase
         return static::toArray($result);
     }
 
+    /**
+     * @param string $table
+     * @param array  $rowKeys
+     *
+     * @throws TIOError
+     * @return array
+     */
     public function getMultiple(string $table, array $rowKeys)
     {
         $tGets = [];
@@ -93,6 +115,13 @@ class Hbase
         }, $results);
     }
 
+    /**
+     * @param string $table
+     * @param string $rowKey
+     * @param array  $columns
+     *
+     * @throws TIOError
+     */
     public function put(string $table, string $rowKey, array $columns)
     {
         $tPut      = new tPut();
@@ -101,9 +130,9 @@ class Hbase
         foreach ($columns as $column) {
             $tcolumnValue = new TColumnValue();
 
-            $tcolumnValue->family    = $column['family']    ?? '';
+            $tcolumnValue->family    = $column['family'] ?? '';
             $tcolumnValue->qualifier = $column['qualifier'] ?? '';
-            $tcolumnValue->value     = $column['value']     ?? '';
+            $tcolumnValue->value     = $column['value'] ?? '';
 
             $tPut->columnValues[] = $tcolumnValue;
         }
