@@ -11,6 +11,7 @@ use Thrift\Transport\TSocket;
 use TIOError;
 use TPut;
 use TResult;
+use TScan;
 
 /**
  * Class Hbase
@@ -59,10 +60,13 @@ class Hbase
 
     public function __construct()
     {
-        $socket          = new TSocket(self::$thriftHost, self::$thriftPort);
+        $socket = new TSocket(self::$thriftHost, self::$thriftPort);
+
         $this->transport = new TBufferedTransport($socket);
-        $protocol        = new TBinaryProtocol($this->transport);
-        $this->client    = new THBaseServiceClient($protocol);
+
+        $protocol = new TBinaryProtocol($this->transport);
+
+        $this->client = new THBaseServiceClient($protocol);
 
         $this->transport->open();
     }
@@ -81,7 +85,8 @@ class Hbase
      */
     public function get(string $table, string $rowKey)
     {
-        $tGet      = new TGet();
+        $tGet = new TGet();
+
         $tGet->row = static::realRowkey($rowKey);
 
         $result = $this->client->get($table, $tGet);
@@ -101,7 +106,8 @@ class Hbase
         $tGets = [];
 
         foreach ($rowKeys as $rowKey) {
-            $tGet      = new TGet();
+            $tGet = new TGet();
+
             $tGet->row = static::realRowkey($rowKey);
 
             $tGets[] = $tGet;
@@ -109,7 +115,6 @@ class Hbase
 
         $results = $this->client->getMultiple($table, $tGets);
 
-        // Transfer it to plain array
         return array_map(function ($result) {
             return static::toArray($result);
         }, $results);
@@ -124,7 +129,8 @@ class Hbase
      */
     public function put(string $table, string $rowKey, array $columns)
     {
-        $tPut      = new tPut();
+        $tPut = new tPut();
+
         $tPut->row = static::realRowkey($rowKey);
 
         foreach ($columns as $column) {
@@ -138,6 +144,29 @@ class Hbase
         }
 
         $this->client->put($table, $tPut);
+    }
+
+    /**
+     * @param string $table
+     * @param string $startRow
+     * @param string $stopRow
+     * @param int    $numRows
+     *
+     * @return array
+     * @throws TIOError
+     */
+    public function getScannerResults(string $table, string $startRow, string $stopRow, int $numRows)
+    {
+        $tScan = new tScan();
+
+        $tScan->startRow = static::realRowkey($startRow);
+        $tScan->stopRow  = static::realRowkey($stopRow);
+
+        $results = $this->client->getScannerResults($table, $tScan, $numRows);
+
+        return array_map(function ($result) {
+            return static::toArray($result);
+        }, $results);
     }
 
     private static function realRowkey(string $rowKey)
