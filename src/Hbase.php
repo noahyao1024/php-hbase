@@ -8,6 +8,7 @@ use THBaseServiceClient;
 use Thrift\Protocol\TBinaryProtocol;
 use Thrift\Transport\TBufferedTransport;
 use Thrift\Transport\TSocket;
+use Throwable;
 use TIOError;
 use TPut;
 use TResult;
@@ -30,6 +31,8 @@ class Hbase
 
     protected $transport;
 
+    protected $socket;
+
     /**
      * Method  getInstance
      *
@@ -45,9 +48,9 @@ class Hbase
     /**
      * Method  getInstance
      *
+     * @return static
      * @author Morysky
      * @static
-     * @return static
      */
     public static function getInstance()
     {
@@ -60,13 +63,10 @@ class Hbase
 
     public function __construct()
     {
-        $socket = new TSocket(self::$thriftHost, self::$thriftPort);
-
-        $this->transport = new TBufferedTransport($socket);
-
-        $protocol = new TBinaryProtocol($this->transport);
-
-        $this->client = new THBaseServiceClient($protocol);
+        $this->socket    = new TSocket(self::$thriftHost, self::$thriftPort);
+        $this->transport = new TBufferedTransport($this->socket);
+        $protocol        = new TBinaryProtocol($this->transport);
+        $this->client    = new THBaseServiceClient($protocol);
 
         $this->transport->open();
     }
@@ -80,14 +80,13 @@ class Hbase
      * @param string $table
      * @param string $rowKey
      *
-     * @throws TIOError
      * @return array
+     * @throws TIOError
      */
     public function get(string $table, string $rowKey)
     {
-        $tGet = new TGet();
-
-        $tGet->row = static::realRowkey($rowKey);
+        $tGet      = new TGet();
+        $tGet->row = $rowKey;
 
         $result = $this->client->get($table, $tGet);
 
@@ -98,23 +97,23 @@ class Hbase
      * @param string $table
      * @param array  $rowKeys
      *
-     * @throws TIOError
      * @return array
+     * @throws TIOError
      */
     public function getMultiple(string $table, array $rowKeys)
     {
         $tGets = [];
 
         foreach ($rowKeys as $rowKey) {
-            $tGet = new TGet();
-
-            $tGet->row = static::realRowkey($rowKey);
+            $tGet      = new TGet();
+            $tGet->row = $rowKey;
 
             $tGets[] = $tGet;
         }
 
         $results = $this->client->getMultiple($table, $tGets);
 
+        // Transfer it to plain array
         return array_map(function ($result) {
             return static::toArray($result);
         }, $results);
@@ -129,9 +128,8 @@ class Hbase
      */
     public function put(string $table, string $rowKey, array $columns)
     {
-        $tPut = new tPut();
-
-        $tPut->row = static::realRowkey($rowKey);
+        $tPut      = new tPut();
+        $tPut->row = $rowKey;
 
         foreach ($columns as $column) {
             $tcolumnValue = new TColumnValue();
@@ -146,32 +144,48 @@ class Hbase
         $this->client->put($table, $tPut);
     }
 
-    /**
-     * @param string $table
-     * @param string $startRow
-     * @param string $stopRow
-     * @param int    $numRows
-     *
-     * @return array
-     * @throws TIOError
-     */
-    public function getScannerResults(string $table, string $startRow, string $stopRow, int $numRows)
+    public function setRecvTimeout(int $millisecond)
     {
-        $tScan = new tScan();
-
-        $tScan->startRow = static::realRowkey($startRow);
-        $tScan->stopRow  = static::realRowkey($stopRow);
-
-        $results = $this->client->getScannerResults($table, $tScan, $numRows);
-
-        return array_map(function ($result) {
-            return static::toArray($result);
-        }, $results);
+        $this->socket->setRecvTimeout($millisecond);
     }
 
-    private static function realRowkey(string $rowKey)
+    public function setSendTimeout(int $millisecond)
     {
-        return substr(md5($rowKey), 24, 8) . '_' . $rowKey;
+        $this->socket->setSendTimeout($millisecond);
+    }
+
+    public function openScanner($table, array $scanParamters)
+    {
+        $scan = new TScan($scanParamters);
+
+        return $this->client->openScanner($table, $scan);
+    }
+
+    public function scannerRowRange($scannerId, $numRows, $retryTimes)
+    {
+        while (true) {
+            try {
+                $rows = $this->client->getScannerRows($scannerId, $numRows);
+                if (empty($rows)) {
+                    break;
+                }
+                foreach ($rows as $row) {
+                    yield $row;
+                }
+            } catch (Throwable $exception) {
+                if (strpos($exception->getMessage(), 'TSocket: timed out') !== false) {
+                    if (--$retryTimes < 0) {
+                        throw $exception;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    public function closeScanner($scannerId)
+    {
+        $this->client->closeScanner($scannerId);
     }
 
     private static function toArray($tResult)
